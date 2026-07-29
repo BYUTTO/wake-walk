@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wake Walk — inside the wake of a tilted wind turbine</title>
+<meta name="description" content="Walk 1764 metres downstream inside the wake of an NREL 5 MW wind turbine. Tilt the rotor and watch the wake compress vertically and spread horizontally around you. Built on a published BYU wake model.">
+<style>
+  /* Structure carried from filtration-walk. The accent is PERIWINKLE rather than aqua
+     or magenta: these are portfolio siblings and must not be mistaken for one another
+     at a glance, and it echoes the blue velocity-deficit colormap the source paper's
+     own figures use. The band warning is the one amber thing on screen — it is the
+     only state where the product is telling you to trust it less. */
+  :root {
+    --bg: #070b12;
+    --ink: #e9edf3;
+    --muted: #93a0b4;
+    --line: #222c3b;
+    --accent: #6f8cff;
+    --cool: #8fa8d8;
+    --warn: #e0a13a;
+    --panel: rgba(9, 12, 19, 0.94);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+  }
+  #scene { display: block; width: 100vw; height: 100vh; }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+    background: radial-gradient(ellipse at 50% 55%, #101c34 0%, #05080e 70%);
+    transition: opacity .45s ease, visibility .45s;
+  }
+  #overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .card {
+    max-width: 48rem; padding: 2.5rem 2.75rem;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: rgba(6, 9, 15, 0.76); backdrop-filter: blur(6px);
+  }
+  .card h1 { margin: 0 0 .35rem; font-size: 2.1rem; font-weight: 600; letter-spacing: -.02em; }
+  .card .kicker {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 1.1rem;
+  }
+  .card p { margin: 0 0 1rem; line-height: 1.6; color: var(--muted); }
+  .card p strong { color: var(--ink); font-weight: 600; }
+  .card.paused .intro-only { display: none; }
+
+  .source {
+    margin: 1.4rem 0 0; padding: .85rem 1rem;
+    background: rgba(111, 140, 255, .07);
+    border-left: 2px solid var(--accent); border-radius: 0 3px 3px 0;
+    font-size: .82rem !important; line-height: 1.6;
+  }
+  .source strong { color: var(--ink); }
+  .source a { color: var(--accent); }
+
+  button#enter {
+    margin-top: 1.2rem; padding: .8rem 1.9rem; font: 600 .95rem var(--sans);
+    color: #060a16; background: var(--accent); border: 0; border-radius: 3px;
+    cursor: pointer; transition: filter .15s ease, transform .15s ease;
+  }
+  button#enter:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  button#enter:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+  .controls {
+    margin-top: 1.6rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: .75rem; color: #64738c; line-height: 1.9;
+  }
+  .controls kbd {
+    background: #131a26; border: 1px solid var(--line); border-radius: 3px;
+    padding: .1rem .4rem; color: var(--ink); font-size: .72rem;
+  }
+
+  #hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+  #crosshair {
+    position: absolute; left: 50%; top: 50%; width: 5px; height: 5px;
+    margin: -2.5px 0 0 -2.5px; border-radius: 50%;
+    background: rgba(233, 237, 243, .40);
+  }
+  #prompt {
+    position: absolute; left: 50%; top: 64%; transform: translateX(-50%);
+    font: 500 1rem var(--sans); color: var(--ink);
+    text-shadow: 0 2px 14px rgba(0,0,0,.92);
+    opacity: 0; transition: opacity .5s ease; white-space: nowrap;
+  }
+  #prompt.visible { opacity: 1; }
+  #hint {
+    position: absolute; left: 50%; bottom: 1.4rem; transform: translateX(-50%);
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .05em;
+    color: rgba(147, 160, 180, .5); white-space: nowrap;
+  }
+
+  /* The state chip is a BUTTON, not a readout: the single most important interaction
+     in the product is the obvious thing to click, works without a keyboard, and is
+     testable in automation. */
+  #state { position: absolute; left: 1.4rem; top: 1.3rem; font-family: var(--mono); font-size: .72rem; line-height: 1.7; }
+  #state-chip {
+    display: inline-flex; align-items: center; gap: .55rem;
+    padding: .3rem .6rem; border-radius: 3px;
+    letter-spacing: .1em; text-transform: uppercase; font-size: .68rem;
+    font-family: var(--mono);
+    border: 1px solid var(--line); color: var(--cool);
+    background: rgba(16, 22, 34, .82);
+    pointer-events: auto; cursor: pointer;
+    transition: border-color .18s ease, background .18s ease;
+  }
+  #state-chip:hover { border-color: var(--accent); background: rgba(20, 30, 58, .88); }
+  #state-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #state-action { padding-left: .55rem; border-left: 1px solid var(--line); color: var(--accent); letter-spacing: .06em; }
+  #state-chip[data-state="revealed"] { color: #cfdcff; border-color: rgba(111, 140, 255, .6); background: rgba(24, 34, 72, .84); }
+  #state-detail { display: block; margin-top: .35rem; color: rgba(147, 160, 180, .62); max-width: 24rem; }
+
+  /* Readout. Everything here is either position or model output; the band strip below
+     it is the honesty line and is styled to be impossible to miss when it goes amber. */
+  #readout {
+    position: absolute; right: 1.4rem; top: 1.3rem; min-width: 15rem;
+    font-family: var(--mono); font-size: .72rem;
+    background: rgba(9, 12, 19, .8); border: 1px solid var(--line); border-radius: 3px;
+    padding: .7rem .85rem .55rem;
+  }
+  #readout dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .28rem .9rem; }
+  #readout dt { color: rgba(147, 160, 180, .8); }
+  #readout dd { margin: 0; text-align: right; color: var(--ink); }
+  #readout .note { margin-top: .5rem; padding-top: .45rem; border-top: 1px solid var(--line); color: rgba(147, 160, 180, .55); font-size: .64rem; line-height: 1.5; }
+  #band {
+    margin-top: .5rem; padding: .3rem .45rem; border-radius: 2px;
+    font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; text-align: center;
+  }
+  #band[data-state="in"] { color: #9fb4e8; background: rgba(111, 140, 255, .10); border: 1px solid rgba(111, 140, 255, .3); }
+  #band[data-state="out"] { color: #f2d39a; background: rgba(224, 161, 58, .12); border: 1px solid rgba(224, 161, 58, .5); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<div id="hud">
+  <div id="state">
+    <button id="state-chip" data-state="hidden" title="Reveal the wake (Space)">
+      <span id="state-label">Open air</span>
+      <span id="state-action">reveal wake</span>
+    </button>
+    <span id="state-detail">The wake is here either way. You just cannot see it.</span>
+  </div>
+
+  <div id="readout">
+    <dl>
+      <dt>downstream</dt><dd id="r-dist">—</dd>
+      <dt>height</dt><dd id="r-elev">—</dd>
+      <dt>wind here</dt><dd id="r-speed">—</dd>
+      <dt>deficit</dt><dd id="r-deficit">—</dd>
+      <dt>rotor tilt</dt><dd id="r-tilt">—</dd>
+      <dt>calibration</dt><dd id="r-calib">—</dd>
+    </dl>
+    <div id="band" data-state="out">—</div>
+    <p class="note">Wind and deficit are MODEL output, not measurements.</p>
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="prompt"></div>
+  <div id="hint"></div>
+</div>
+
+<div id="overlay">
+  <div class="card">
+    <p class="kicker">Wind energy &middot; NREL 5&nbsp;MW &middot; 1764&nbsp;m downstream</p>
+    <h1>Wake Walk</h1>
+    <p class="intro-only">
+      You are standing on the ground at the foot of a wind turbine. The rotor is
+      <strong>126 metres across</strong> and its hub is <strong>90 metres</strong> over your
+      head. Look up first — everything else out here is measured against that.
+    </p>
+    <p class="intro-only">
+      Behind the rotor is a <strong>wake</strong>: a vast, shaped volume of slowed air that
+      is still coherent a kilometre and a half downstream, and that decides where the next
+      turbine in a wind farm can go. It is completely invisible. Press <strong>Space</strong>
+      and you gain the ability to see it — it was there the whole time.
+    </p>
+    <p class="intro-only">
+      Then press <strong>T</strong>. Tilting the rotor <strong>compresses the wake
+      vertically and spreads it horizontally</strong>, around your body. That is the finding
+      this walk is built on, and it is the reason wake steering works.
+    </p>
+    <p class="intro-only">
+      Each streak of air is drawn the distance that parcel actually travels in 1.2 seconds,
+      so streaks inside the wake are shorter because that air genuinely went less far.
+      Brightness is a visualisation on top of it.
+    </p>
+    <p class="source">
+      <strong>Built on published research.</strong> The wake is the modified Bastankhah
+      Gaussian model of J.&nbsp;Cutler, C.&nbsp;Bay and A.&nbsp;Ning,
+      <em>&ldquo;Introduction to and comparison of deep learning and optimization approaches
+      to analytical wake modeling of a tilted wind turbine&rdquo;</em>,
+      <a href="https://doi.org/10.5194/wes-11-37-2026" target="_blank" rel="noopener">Wind
+      Energy Science 11, 37&ndash;49 (2026)</a> &mdash; Cutler and Ning at BYU Mechanical
+      Engineering, Bay at NREL. Both of the paper&rsquo;s calibrations are carried; press
+      <strong>K</strong> to switch between them.
+      <br><br>
+      <span id="integrity"></span>
+    </p>
+    <button id="enter">Step into the field</button>
+    <div class="controls">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;·&nbsp;
+      <kbd>Shift</kbd> cover ground &nbsp;·&nbsp; <kbd>R</kbd>/<kbd>F</kbd> rise &amp; descend &nbsp;·&nbsp;
+      mouse look<br>
+      <kbd>Space</kbd> reveal the wake &nbsp;·&nbsp; <kbd>T</kbd> rotor tilt &nbsp;·&nbsp;
+      <kbd>K</kbd> calibration &nbsp;·&nbsp; <kbd>P</kbd> free cursor (screenshots)<br>
+      Desktop only — pointer lock does not exist on touch devices.
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+<script>
+  // Telemetry target. Unset deliberately: with no credentials the app runs in local
+  // mode and nothing leaves the browser. See src/telemetry.js.
+  window.__WAKE_CONFIG = { supabaseUrl: null, supabaseAnonKey: null };
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

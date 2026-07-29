@@ -1,0 +1,8 @@
+{
+  "name": "wake-walk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A first-person walk inside the wake of a tilted wind turbine, rotor plane to 14 diameters downstream.",
+  "scripts": { "test": "node --test test/*.test.js", "serve": "node scripts/serve.js" }
+}
