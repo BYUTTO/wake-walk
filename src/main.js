@@ -80,7 +80,9 @@ scene.add(fill);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.85, 0.72);
+// Strength kept low on purpose. The wake is additive and already accumulates; a strong
+// bloom on top turned the axial view into a featureless white disc.
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.26, 0.8, 0.8);
 composer.addPass(bloom);
 
 const turbine = new Turbine(scene);

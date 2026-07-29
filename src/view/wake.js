@@ -24,7 +24,12 @@ import { WALK_XD } from '../wake/model.js';
 
 const STATIONS = 64;
 const EXTENT = 3.2; // quad half-size in standard deviations
-const DENSITY = 0.45; // per-quad opacity scale, with NEAR_FADE below carrying the inside case
+// Per-quad opacity. Additive blending accumulates without a ceiling, and the worst case
+// is looking straight down the wake AXIS from downstream: every one of the 64 quad
+// centres lines up on the same view ray and the core saturates to flat white, losing
+// the shape entirely. 0.26 keeps the axial view as a bright tunnel that still has
+// structure while leaving the profile view legible.
+const DENSITY = 0.26;
 
 // Near-fade. Without this the walk is unusable from INSIDE the wake: you are looking
 // through ~30 additive quads at once, they saturate, and a shaped volume renders as a
