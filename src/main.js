@@ -87,6 +87,8 @@ composer.addPass(bloom);
 
 const turbine = new Turbine(scene);
 const wake = new WakeVolume(scene);
+// A custom ShaderMaterial does not pick up scene.fog on its own.
+wake.useFog(scene.fog);
 const flow = new FlowField(scene);
 buildGround(scene);
 

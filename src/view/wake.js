@@ -51,27 +51,47 @@ const STEPS = 80;
 // that the far side of the wake still falls off.
 const ABSORB = 0.022;
 
-const WAKE_COLOR_CORE = new THREE.Color(0xbcd8ff);
-const WAKE_COLOR_EDGE = new THREE.Color(0x2f5aa8);
+// Muted on purpose. The accumulated colour is a weighted average of samples and so is
+// bounded by this value — which means whatever this is, a fully-saturated ray IS this
+// colour at full alpha. A near-white core therefore reads as a light source rather than
+// as air, and bloom then turns it into a small sun. Blue enough to still glow, dark
+// enough that saturation looks like dense air.
+const WAKE_COLOR_CORE = new THREE.Color(0x8fb0e0);
+const WAKE_COLOR_EDGE = new THREE.Color(0x27497f);
+
+/**
+ * Ceiling on the rendered amplitude.
+ *
+ * The far-wake model reports a peak deficit of exactly 1.000 at x/D <= 2 — the radicand
+ * in Eq. (3) goes negative there and the clamp pins it. That is not a strong wake, it is
+ * the model being evaluated 5 diameters before it means anything. Momentum theory puts
+ * the actual rotor-plane deficit near 1-sqrt(1-C_T) = 0.55, so anything above this is
+ * certainly wrong.
+ *
+ * Capping the RENDER is the right lever, and it is deliberately not applied to the
+ * readout: the HUD still reports whatever the model says (62.5% at 4 D), flagged
+ * EXTRAPOLATING. The picture stops lying; the number stays honest about the model.
+ */
+const AMP_CEILING = 0.42;
 
 /**
  * How strongly a station is drawn, given how far outside the calibrated band it sits.
  *
- * An honesty control that also fixes a visual problem. The far-wake model has no
- * business in the near wake, and evaluated there it does not fail quietly — the Gaussian
- * widths collapse, the amplitude saturates, and it reports a ~60% velocity deficit at
- * 4 D that no real turbine produces. Drawn at full strength those stations were the
- * brightest thing in the scene, which is exactly backwards: the least trustworthy part
- * of the model was the most visually dominant.
+ * The first version floored this at 0.10 over 4 D, which was too aggressive in a way
+ * that produced two separate bug reports from one cause: the wake was nearly invisible
+ * for its first 880 m and then jumped to full strength at 7 D. That reads as a glowing
+ * blob floating in the middle distance, DETACHED from the turbine it comes out of — and
+ * the jump itself is the "mini sun". A wake has to visibly leave the machine.
  *
- * Full weight inside 7-12 D, falling to a faint 0.10 by four diameters outside it.
+ * With the amplitude ceiling above doing the real work on the near field, this can be a
+ * gentle shading cue instead of a mask: floor 0.45, easing over 7 D.
  */
 function bandFade(xOverD) {
   if (withinCalibration(xOverD)) return 1;
   const outside = xOverD < CALIBRATED_XD.min
     ? CALIBRATED_XD.min - xOverD
     : xOverD - CALIBRATED_XD.max;
-  return Math.max(0.10, 1 - outside / 4);
+  return Math.max(0.45, 1 - outside / 7);
 }
 
 const VERT = /* glsl */ `
@@ -97,6 +117,9 @@ const FRAG = /* glsl */ `
   uniform float uAbsorb;
   uniform float uReveal;
   uniform float uNearFade;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
 
   varying vec3 vWorld;
 
@@ -173,6 +196,13 @@ const FRAG = /* glsl */ `
         float near = smoothstep(0.0, uNearFade, t);
         float a = 1.0 - exp(-d * uAbsorb * stepLen * near);
         vec3 c = mix(uEdge, uCore, clamp(d * 3.0, 0.0, 1.0));
+        // A custom ShaderMaterial does not inherit scene.fog, so without this the wake
+        // a kilometre away is drawn exactly as brightly as the wake beside you — which
+        // is most of why a distant stretch of it reads as a light source instead of as
+        // far-off air. Fading each sample toward the fog colour by its own depth makes
+        // the far wake recede into the background the way every other object does.
+        float fogF = clamp((uFogFar - t) / (uFogFar - uFogNear), 0.0, 1.0);
+        c = mix(uFogColor, c, fogF);
         acc += T * a * c;
         T *= (1.0 - a);
         if (T < 0.01) break;
@@ -224,6 +254,10 @@ export class WakeVolume {
         // wake fogged the viewer in and nothing beyond arm's reach read; 90 m opens up
         // enough of the near field to see the wake's structure receding ahead.
         uNearFade: { value: 90 },
+        // Kept in step with scene.fog by main.js at construction time.
+        uFogColor: { value: new THREE.Color(0x070b12) },
+        uFogNear: { value: 800 },
+        uFogFar: { value: 3700 },
       },
       transparent: true,
       depthWrite: false,
@@ -272,14 +306,25 @@ export class WakeVolume {
       d[i * 4 + 2] = -deflectionY(this.tiltDeg, xd);
       d[i * 4 + 3] = TURBINE.hubHeight + deflectionZ(this.tiltDeg, xd);
 
-      // Row 1: amplitude and the out-of-band weight.
+      // Row 1: amplitude and the out-of-band weight. The ceiling only affects what is
+      // DRAWN — model.js is untouched and the HUD still reports the raw value.
       const o = (BINS + i) * 4;
-      d[o + 0] = peakDeficit(this.tiltDeg, xd, this.calibration);
+      d[o + 0] = Math.min(peakDeficit(this.tiltDeg, xd, this.calibration), AMP_CEILING);
       d[o + 1] = bandFade(xd);
       d[o + 2] = 0;
       d[o + 3] = 0;
     }
     this.table.needsUpdate = true;
+  }
+
+  /**
+   * Adopt the scene's fog. Called once by main.js so the two cannot drift: a wake fading
+   * on a different curve to everything around it is worse than no fog at all.
+   */
+  useFog(fog) {
+    this.material.uniforms.uFogColor.value.copy(fog.color);
+    this.material.uniforms.uFogNear.value = fog.near;
+    this.material.uniforms.uFogFar.value = fog.far;
   }
 
   setTilt(deg) { this.tiltDeg = deg; this._rebuild(); }

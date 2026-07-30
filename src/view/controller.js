@@ -23,8 +23,8 @@
 import * as THREE from 'three';
 import { BOUNDS, SPAWN, toWorldZ, toXOverD } from './scene-frame.js';
 
-const WALK_SPEED = 6.0; // m/s — a brisk walk, honest at conversational scale
-export const RUN_MULT = 12.0; // 72 m/s; crosses the full 1764 m in ~25 s
+const WALK_SPEED = 8.0; // m/s — a brisk walk, honest at conversational scale
+export const RUN_MULT = 22.0; // 176 m/s; crosses the full 1764 m in ~10 s
 const DAMPING = 9;
 const VERTICAL_MULT = 0.85; // rising is slightly slower than walking, so it reads as effort
 
