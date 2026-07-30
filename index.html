@@ -87,7 +87,10 @@
     position: absolute; left: 50%; top: 64%; transform: translateX(-50%);
     font: 500 1rem var(--sans); color: var(--ink);
     text-shadow: 0 2px 14px rgba(0,0,0,.92);
-    opacity: 0; transition: opacity .5s ease; white-space: nowrap;
+    opacity: 0; transition: opacity .5s ease;
+    /* Was nowrap, which sent the longer calibration note straight off both edges of
+       the screen. Centred, wrapped, and capped instead. */
+    max-width: min(46rem, 80vw); text-align: center; line-height: 1.5;
   }
   #prompt.visible { opacity: 1; }
   #hint {

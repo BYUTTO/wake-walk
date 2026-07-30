@@ -294,4 +294,13 @@ export const VIEWPOINTS = {
   hub: { xOverD: 9.5, y: 0, height: TURBINE.hubHeight, facingDeg: 0, pitch: 0.0 },
   far: { xOverD: CALIBRATED_XD.max, y: 0, height: 45, facingDeg: 0, pitch: 0.0 },
   lookback: { xOverD: 13.0, y: 0, height: 50, facingDeg: 180, pitch: 0.06 },
+  // Outside the wake and above it, looking back along its length at the turbine.
+  // This is the one place the wake reads as an OBJECT rather than as weather: from
+  // inside or alongside, a 1.7 km tube simply fills the view and has no silhouette.
+  // Worth a named viewpoint because it is the shot that shows what the walk is about.
+  // y is 300 and not further out because the movement clamp stops at 2.5 D (315 m)
+  // laterally. A viewpoint outside the box looks fine until the player moves, at which
+  // point the controller yanks them back to the wall — so a named viewpoint has to be
+  // somewhere they could actually have walked to.
+  survey: { xOverD: 11.5, y: 300, height: 210, facingDeg: -158, pitch: -0.09 },
 };

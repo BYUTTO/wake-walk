@@ -83,7 +83,7 @@ never "measured", and it is the first thing a domain reader should push on.
 ```
 src/wake/model.js     the paper, in code. Everything else renders what this returns.
 src/view/scene-frame.js  the ONLY place the paper's frame meets the world frame
-src/view/wake.js      the deficit volume — 64 cross-stream Gaussian quads
+src/view/wake.js      the deficit volume — raymarched against a baked station table
 src/view/flow.js      the streaks. The payoff.
 src/view/turbine.js   NREL 5 MW geometry, blades from a real chord/twist distribution
 src/view/ground.js    grid, posts, distance markers
@@ -114,6 +114,24 @@ that no test could reach and that would drift the first time a coefficient chang
 - **Streak density is a two-sided constraint.** Too sparse reads as empty sky with
   specks; too dense additively saturates into a white wall you cannot see the wake
   through.
+- **Billboard stacks cannot render this volume, and it took two tries to admit it.**
+  v1 was 64 cross-stream quads with additive blending: additive has no ceiling, so any
+  view down the wake axis put every quad centre on one ray, summed past 1, and clipped
+  to a blinding white disc. Lowering the density only moved where the blowout started.
+  v2 switched to back-to-front alpha, which fixed the blowout (layers converge on
+  `1-(1-a)^n`) but exposed the real flaw — a cross-stream quad seen from the SIDE is
+  edge-on and projects to nothing, so the wake nearly vanished in profile, the one angle
+  where its shape reads best. Additive had been hiding that by summing 64 slivers.
+  v3 raymarches with analytic transmittance: correct from every angle, no ordering, and
+  saturation is bounded by construction rather than by tuning.
+- **Absorption has a narrow usable window.** Too low and every ray integrates 1.7 km of
+  wake, washing the Gaussian contrast into flat haze. Too high and every ray saturates
+  within a few steps — and since the wake is a long tube the viewer stands beside,
+  almost every ray hits it, so the whole screen becomes one sheet of wake colour.
+- **A named viewpoint outside the movement clamp looks fine in automation and breaks for
+  real users.** The controller only clamps while enabled, and it is not enabled without
+  pointer lock, so a screenshot shows the intended framing while a real player gets
+  yanked back to the wall on their first keypress. There is now a test for it.
 
 ## Status
 

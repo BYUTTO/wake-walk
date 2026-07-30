@@ -285,3 +285,24 @@ test('every viewpoint is inside the walk and above ground', () => {
     assert.ok(Number.isFinite(vp.facingDeg), `${name} has no facing`);
   }
 });
+
+test('every viewpoint is inside the movement clamp, laterally and vertically', async () => {
+  // The gap this closes: the `survey` viewpoint shipped at 430 m lateral against a
+  // 315 m clamp. It looked correct in a screenshot because the controller only clamps
+  // while it is enabled, and it is not enabled without pointer lock — so automated
+  // verification saw the intended framing and a real player would have been dragged
+  // back to the wall on their first keypress. Bounds live in the view layer, but
+  // scene-frame.js is pure data and imports nothing from three, so a test can read it.
+  const { BOUNDS } = await import('../src/view/scene-frame.js');
+  for (const [name, vp] of Object.entries(VIEWPOINTS)) {
+    const lateral = vp.y ?? 0;
+    assert.ok(
+      lateral >= BOUNDS.minX && lateral <= BOUNDS.maxX,
+      `${name} sits at ${lateral} m lateral, outside the clamp (${BOUNDS.minX}..${BOUNDS.maxX})`,
+    );
+    assert.ok(
+      vp.height >= BOUNDS.minY && vp.height <= BOUNDS.maxY,
+      `${name} sits at ${vp.height} m, outside the clamp (${BOUNDS.minY}..${BOUNDS.maxY})`,
+    );
+  }
+});

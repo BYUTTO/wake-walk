@@ -283,6 +283,13 @@ globalThis.__wake = {
   get calibration() { return CALIBRATION_IDS[calibrationIndex]; },
   speedAt: (x, y, z) => flow.speedAt(x, y, z),
   freestream: INFLOW.U,
-  goto: (name) => { if (VIEWPOINTS[name]) controller.placeAt(VIEWPOINTS[name]); },
+  // Accepts a named viewpoint or a raw {xOverD, y, height, facingDeg, pitch} literal.
+  // The literal form is for reproducing a specific reported view during QA — a bug
+  // screenshot carries its own coordinates in the HUD, so they can be typed straight
+  // back in rather than walked to by hand.
+  goto: (target) => {
+    const vp = typeof target === 'string' ? VIEWPOINTS[target] : target;
+    if (vp) controller.placeAt(vp);
+  },
   viewpoints: Object.keys(VIEWPOINTS),
 };

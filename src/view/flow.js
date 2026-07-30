@@ -207,7 +207,9 @@ export class FlowField {
     this.geometry = geo;
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 1;
+    // Above the wake volume (renderOrder 1) so the air reads as being inside the wake
+    // rather than hidden behind it.
+    this.mesh.renderOrder = 2;
     scene.add(this.mesh);
 
     this._seeded = false;
